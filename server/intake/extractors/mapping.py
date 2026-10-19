@@ -23,6 +23,9 @@ def key_for(label):
     return next((key for key,aliases in ALIASES.items() if normal in aliases),None)
 
 def map_evidence(evidence,customer_id=None):
+    from .bumjin import extract_bumjin
+    structured=extract_bumjin(evidence)
+    if structured is not None:return structured
     fields={key:ExtractedField(None) for key in ['po_number','customer_name','ordered_on','received_on','contact','etd']}
     lines=[];warnings=[];rows=[]
     grouped={}
