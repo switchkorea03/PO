@@ -71,7 +71,8 @@ def review(request,draft_id):
     if customer and initial.get('po_number'):target=Order.objects.filter(customer=customer,po_number=initial['po_number']).first()
     if request.GET.get('target'):
         target=Order.objects.select_related('customer').get(pk=request.GET['target']);customer=target.customer
-    initial.update({'customer_id':str(customer.id) if customer else '', 'order_type':customer.default_type if customer else 'domestic','erp_type':target.erp_type if target else 'unspecified','received_on':initial.get('received_on') or today_kst(timezone.now()).isoformat(),'lines':[{key:value.get('value') for key,value in line.items()} for line in draft.result.get('lines',[])]})
+    suggested_type=initial.get('order_type') if initial.get('order_type') in ('domestic','overseas') else 'domestic'
+    initial.update({'customer_id':str(customer.id) if customer else '', 'order_type':customer.default_type if customer else suggested_type,'erp_type':target.erp_type if target else 'unspecified','received_on':initial.get('received_on') or today_kst(timezone.now()).isoformat(),'lines':[{key:value.get('value') for key,value in line.items()} for line in draft.result.get('lines',[])]})
     if target:
         initial.update({'target_order_id':str(target.id),'row_version':target.row_version,'po_number':target.po_number,'order_type':target.order_type,'received_on':target.received_on or initial['received_on']})
         existing=list(target.lines.all())

@@ -4,12 +4,16 @@ from .mapping import map_evidence
 
 def extract_pdf(path):
     import pypdfium2 as pdfium
-    document=pdfium.PdfDocument(str(path));evidence=[]
+    from .solum import extract_page,combine
+    document=pdfium.PdfDocument(str(path));evidence=[];solum_pages=[]
     try:
         if len(document)>100:raise ValueError('PDF 100페이지 제한 초과 · 직접 입력하세요.')
         for index in range(len(document)):
             page=document[index];textpage=page.get_textpage()
-            try:text=textpage.get_text_range()
+            try:
+                text=textpage.get_text_range()
+                profile=extract_page(textpage,index+1,page.get_width(),known=bool(solum_pages))
+                if profile is not None:solum_pages.append(profile)
             finally:textpage.close()
             if not text.strip():
                 import pytesseract
@@ -22,4 +26,4 @@ def extract_pdf(path):
                 if line.strip():evidence.append(Evidence(index+1,None,None,line))
             page.close()
     finally:document.close()
-    return map_evidence(tuple(evidence))
+    return combine(solum_pages,tuple(evidence)) if solum_pages else map_evidence(tuple(evidence))

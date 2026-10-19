@@ -3,6 +3,7 @@ const orderForm=document.querySelector('#order-form');
 if(orderForm){
  const data=JSON.parse(document.querySelector('#order-data').textContent);const rows=document.querySelector('#line-rows');
  for(const [key,value] of Object.entries(data)){const input=orderForm.elements.namedItem(key);if(input&&key!=='lines')input.value=value??'';}
+ if(!data.customer_id&&data.customer_name){document.querySelector('#customer-name').value=data.customer_name;document.querySelector('#customer-type').value=data.order_type||'domestic';document.querySelector('#customer-currency').value=data.lines?.[0]?.currency||'KRW';}
  function addLine(line={}){const row=document.createElement('fieldset');row.className='line-row';if(line.id)row.dataset.id=line.id;row.innerHTML='<legend>PO 품목</legend>'+[['code','품목코드','text'],['name','품명·모델명','text'],['quantity','주문수량','number'],['unit','단위','text'],['unit_price','단가','number'],['currency','통화','text'],['source_amount','원문 공급가액','number'],['requested_due','요청납기','date']].map(([key,label,type])=>`<label>${label}<input data-field="${key}" type="${type}" ${type==='number'?'step="any"':''} value="${esc(line[key]??({unit:'EA',currency:'KRW'}[key]||''))}"></label>`).join('')+'<button type="button" data-remove-line>품목 삭제</button>';row.querySelector('[data-remove-line]').onclick=()=>row.remove();rows.append(row);}
  (data.lines?.length?data.lines:[{}]).forEach(addLine);document.querySelector('#add-line').onclick=()=>addLine();
  if(data.revision_lines){
