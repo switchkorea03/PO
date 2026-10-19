@@ -1,0 +1,1 @@
+{"name":"po-design-prototype","private":true,"type":"module","scripts":{"dev":"../.venv/Scripts/python.exe -m http.server 4174 --bind 127.0.0.1 --directory dist","test":"node --test tests/*.test.mjs"}}
