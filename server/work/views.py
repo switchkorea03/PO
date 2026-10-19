@@ -11,7 +11,7 @@ from common.clock import today_kst
 from common.errors import ValidationError
 from orders.models import Customer,OrderLine
 from .models import Task
-from .queries import list_tasks
+from .queries import list_tasks,dashboard_summary
 from .rules import next_weekday
 from . import services
 
@@ -64,7 +64,8 @@ def calendar_page(request):
         from notices.models import NoticeBatch
         notice_problems=NoticeBatch.objects.filter(status__in=["failed","unknown"]).order_by("-created_at")[:3]
     except ImportError:pass
-    return render(request,"work/calendar.html",{"today":today,"selected":selected,"mode":mode,"weeks":calendar_weeks,"previous":previous,"following":following,"selected_tasks":selected_tasks,"undated":undated,"customers":Customer.objects.all(),"notice_problems":notice_problems})
+    summary=dashboard_summary(today,request.GET.get('customer') or None,request.GET.get('type') or None)
+    return render(request,"work/calendar.html",{"today":today,"selected":selected,"mode":mode,"weeks":calendar_weeks,"previous":previous,"following":following,"selected_tasks":selected_tasks,"undated":undated,"customers":Customer.objects.all(),"notice_problems":notice_problems,'summary':summary})
 
 @endpoint
 def task_detail(request,task_id):

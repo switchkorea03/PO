@@ -12,7 +12,10 @@ from . import services
 @endpoint
 def list_orders(request):
     orders=search_orders(request.GET.get("q",""),request.GET.get("type"),request.GET.get("customer"),request.GET.get("state"))
-    return render(request,"orders/list.html",{"orders":orders,"customers":Customer.objects.all()})
+    from work.queries import dashboard_summary
+    from common.clock import today_kst
+    from django.utils import timezone
+    return render(request,"orders/list.html",{"orders":orders,"customers":Customer.objects.all(),'summary':dashboard_summary(today_kst(timezone.now()),request.GET.get('customer') or None,request.GET.get('type') or None)})
 
 @endpoint
 def new_order(request):

@@ -1,0 +1,6 @@
+<section class="summary-grid" aria-label="업무 현황">
+<article class="summary-card"><span>오늘 해야 할 업무</span>{% include 'components/icon.html' with name='calendar' %}<strong class="blue">{{ summary.today }}<small>건</small></strong><p>오늘의 일정에서 할 일을 확인하세요</p></article>
+<article class="summary-card"><span>지연된 업무</span>{% include 'components/icon.html' with name='history' %}<strong class="amber">{{ summary.overdue }}<small>건</small></strong><p>지난 날짜의 미완료·부분완료 업무</p></article>
+<article class="summary-card"><span>진행 중인 PO</span>{% include 'components/icon.html' with name='orders' %}<strong>{{ summary.open_orders }}<small>건</small></strong><p>출고실적과 취소를 반영한 잔량 기준</p></article>
+<article class="summary-card"><span>ETD 미정 회차</span>{% include 'components/icon.html' with name='box' %}<strong class="teal">{{ summary.undated_shipments }}<small>건</small></strong><p>ETD 입력 전 후속업무·문자 보류</p></article>
+</section>

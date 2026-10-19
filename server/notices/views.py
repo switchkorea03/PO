@@ -23,7 +23,13 @@ def settings_page(request):
             config.recipient=recipient;config.sender=sender;config.enabled=data.get('enabled') is True;config.save()
         return JsonResponse({'saved':True})
     ready=settings.SMS_PROVIDER=='solapi' and bool(settings.SMS_API_KEY and settings.SMS_API_SECRET and settings.SMS_LIVE_ENABLED)
-    return render(request,'notices/settings.html',{'config':config,'may_edit':may_edit,'ready':ready,'provider':settings.SMS_PROVIDER,'heartbeat':WorkerHeartbeat.objects.filter(name='notices').first()})
+    from common.clock import today_kst
+    from django.utils import timezone
+    from work.queries import get_notice_candidates
+    from .renderer import render_notice
+    on=today_kst(timezone.now());items=get_notice_candidates(on,True)
+    preview=render_notice(items,on) if items else '오늘 및 이전 날짜에 미완료 업무가 없습니다.\n알릴 업무가 없으면 문자를 보내지 않습니다.'
+    return render(request,'notices/settings.html',{'config':config,'may_edit':may_edit,'ready':ready,'provider':settings.SMS_PROVIDER,'heartbeat':WorkerHeartbeat.objects.filter(name='notices').first(),'message_preview':preview})
 
 @endpoint
 def history(request):

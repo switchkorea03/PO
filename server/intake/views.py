@@ -1,12 +1,13 @@
 from pathlib import Path
 from datetime import date
-from django.http import JsonResponse,FileResponse
+from django.http import JsonResponse,FileResponse,HttpResponse
 from django.shortcuts import render,redirect
 from django.conf import settings
 from common.http import endpoint,body
 from common.errors import ValidationError
 from common.clock import today_kst
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from orders.models import Customer,Order
 from orders.forms import order_input
 from .models import SourceFile,ExtractionJob,ExtractionDraft
@@ -33,6 +34,31 @@ def source_download(request,source_id):
     source=SourceFile.objects.get(pk=source_id);path=Path(source.path).resolve()
     if not path.is_relative_to(Path(settings.PRIVATE_MEDIA_ROOT).resolve()):raise ValidationError('파일 보관 경로를 확인하세요.')
     return FileResponse(path.open('rb'),as_attachment=True,filename=source.original_name)
+
+@xframe_options_sameorigin
+@endpoint
+def source_preview(request,source_id):
+    source=SourceFile.objects.get(pk=source_id);path=Path(source.path).resolve()
+    if source.extension!='.pdf':raise ValidationError('이 파일은 원본 다운로드 후 확인하세요.')
+    if not path.is_relative_to(Path(settings.PRIVATE_MEDIA_ROOT).resolve()):raise ValidationError('파일 보관 경로를 확인하세요.')
+    response=FileResponse(path.open('rb'),content_type='application/pdf',as_attachment=False,filename=source.original_name)
+    response['Cache-Control']='private, no-store'
+    return response
+
+@endpoint
+def source_preview_image(request,source_id):
+    from .preview import render_page
+    source=SourceFile.objects.get(pk=source_id);path=Path(source.path).resolve()
+    if source.extension!='.pdf':raise ValidationError('PDF 원본만 미리보기할 수 있습니다.')
+    if not path.is_relative_to(Path(settings.PRIVATE_MEDIA_ROOT).resolve()):raise ValidationError('파일 보관 경로를 확인하세요.')
+    try:number=int(request.GET.get('page','1'))
+    except (ValueError,TypeError):raise ValidationError('PDF 페이지 번호를 확인하세요.')
+    content,count=render_page(path,number)
+    response=HttpResponse(content,content_type='image/png')
+    response['X-PDF-Page-Count']=str(count)
+    response['Cache-Control']='private, no-store'
+    response['Cross-Origin-Resource-Policy']='same-origin'
+    return response
 
 @endpoint
 def review(request,draft_id):
