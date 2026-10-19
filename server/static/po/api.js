@@ -1,0 +1,3 @@
+export async function postJson(url,payload){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.querySelector('meta[name="csrf-token"]').content},credentials:'same-origin',body:JSON.stringify(payload)});let result;try{result=await response.json();}catch{throw new Error('요청 처리에 실패했습니다. 로그인 상태를 확인하세요.');}if(!response.ok)throw new Error(result.error||'저장하지 못했습니다.');return result;}
+export function showError(error){const box=document.querySelector('#message');box.hidden=false;box.textContent=error.message;box.scrollIntoView({block:'nearest'});}
+export const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

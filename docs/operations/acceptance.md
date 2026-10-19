@@ -1,0 +1,60 @@
+# 구현·인수 결과
+
+- 기준 설계: `docs/superpowers/specs/2026-10-16-po-management-calendar-design.md`
+- 검증일: 2026-10-19 (한국시간)
+- 구현 위치: `server/`, 로컬 실행: `ops/`
+- 기존 `po-calendar/`, `ui-mockup/` 보존.
+
+## 확인된 결과
+
+서버 테스트66개 모두 통과(건너뛴 테스트 없음), migration 변경 누락 없음. 실제 PostgreSQL17에서 수량 동시성·업무 이력·문자 outbox를 검증했습니다. 문자 테스트는 fake 및 HTTP 계약 테스트이며 실제 휴대폰 발송은 하지 않았습니다.
+
+| 영역 | 검증 내용 | 근거 |
+|---|---|---|
+| 권한 | 비로그인 차단·공동 PO 조회·일반 사용자 계정 관리 차단 | accounts.tests |
+| PO·수량 | 납기별 초기 회차·100중70출고/잔량30·초과 차단·취소·정정 | orders.tests |
+| 동시성 | 두 DB 연결에서70/40 동시 배정 중 하나 거부 | orders.tests.test_conflicts |
+| 날짜 | 월요일 준비 금요일·원 수령주 기준 차주화요일·금토일 ETD 후속 월요일·연경계 | work.tests.test_rules |
+| 업무 | 수동 날짜 보존·완료 이력·재확인·부분완료·ETD 삭제 시 보류 | work.tests.test_reconcile/test_completion |
+| 달력 | 고객명 묶음·개별 ID 보존·국내 납기만 표시·필터·CSRF·409 충돌 | work.tests.test_calendar |
+| 파일 | 보호 다운로드·해시 중복·위장 형식 거부·PDF/xlsx/xls·수식 캐시 없음 | intake.tests |
+| OCR | 로컬 Tesseract5.5.3 + kor/eng, 이미지형 PDF에서 PO 번호 추출 | intake.tests.test_ocr |
+| 확인 등록 | 확인 전 PO 없음·수정 후 등록·원문금액 차이·이중 확정 방지·실패 수동입력 | intake.tests.test_review |
+| 문자 | 평일09시·오늘/지연·당일 추가·미완료 세부만 안내·재저장 중복 없음 | notices.tests.test_plan |
+| 문자 복구 | 5분 간격3회 재시도·프로세스 종료 후 조회·미확정 재발송 금지·동시 worker | notices.tests.test_dispatch/test_recovery/test_concurrency |
+| 공급자 | SOLAPI 인증·발송 payload·접수/전달 구분·설정 없는 발송 차단 | notices.tests.test_provider |
+| 백업 | 실제 pg_dump/pg_restore·격리 DB·파일해시·완료 ID 동일·문자 비활성 | common.tests.test_backup |
+
+핵심 PO 등록→회차70/30→70출고 완료→잔량30→달력 체크→새로고침 보존, Excel 업로드→추출→수정→등록, 문자 설정·이력까지1440/1280/768/360px에서 전체12개 E2E가 통과했습니다. 운영 설정(DEBUG=0)의 `check --deploy`도 경고 없이 통과했습니다.
+
+## 최종 검토 반영
+
+독립 코드 검토에서 발견한 중요 문제7개를 재현 테스트로 확인하고 수정했습니다.
+
+- 미완료 회차만 사유와 함께 취소하여 배정을 해제하고, 다른 회차·완료 기록을 유지합니다. 주문 자체의 취소수량은 배정 해제 후 잔량 취소로 기록합니다.
+- 추가 문자 이벤트는 순번 커서 대신 개별 처리 여부로 소비합니다. 두 DB 연결에서 낮은 순번의 거래가 나중에 커밋되어도 누락되지 않습니다.
+- 완료 업무의 체크 해제는 명시적인 재작업으로 처리합니다. ETD가 삭제된 업무는 재작업 시 보류되고 알림에서 제외됩니다.
+- 수정 PO 확인 화면에서 기존 품목을 직접 선택할 수 있습니다. 중복·변경·미기재 코드의 자동 연결을 강제하지 않습니다.
+- PO 필드·가격·통화·품목·수량·납기 등의 변경 전후 값을 이력에 저장하고 화면에서 조회합니다.
+- 재작업 시 이전 완료 기록의 ERP 안내는 이력에 남기고 현재 통화·거래유형의 안내로 갱신합니다.
+- 출고 완료 후에도 ETA를 별도로 수정하며 수량·출고 실적은 유지합니다.
+
+경미한 지적이었던 업무 상세의 대상 품목·수량 표시도 반영했습니다. 실제 고객 파일, 실제 문자 수신, 회사 운영 배포는 아래 인수 조건으로 남아 있습니다.
+
+## 회사 환경에서 남은 인수
+
+- 실제 고객의 국내 PDF·해외 PDF·스캔 PDF·xlsx·xls 각1건 이상의 고객별 인식 품질. 현재 테스트는 비식별 합성 fixture입니다.
+- 회사가 사용할 문자 공급자 계정·API 인증정보·사전 등록 발신번호·본인 수신번호 설정과 실제 수신1건 대조.
+- 회사 내부 URL·HTTPS·운영 사용자·배포 서버·상주 서비스·백업 경로·주기 확정.
+
+이 항목들은 로컬 구현과 분리한 운영 인수 조건입니다. 서비스 가입·요금 결제·회사 운영 배포·ERP/메일/공유 Excel 연결은 진행하지 않았습니다.
+
+## 재실행 명령
+
+```powershell
+.\.venv\Scripts\python.exe ops/runtime.py
+.\.venv\Scripts\python.exe server/manage.py test orders work accounts intake notices common.tests -v 2 --noinput
+.\.venv\Scripts\python.exe server/manage.py makemigrations --check --dry-run
+cd server/e2e
+npx playwright test
+```

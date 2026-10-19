@@ -109,3 +109,4 @@ class ChangeEvent(models.Model):
     eligibility=models.JSONField(default=list)
     actor=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.PROTECT)
     occurred_at=models.DateTimeField()
+    consumed_at=models.DateTimeField(null=True,blank=True,db_index=True)

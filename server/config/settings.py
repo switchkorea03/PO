@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(os.getenv('ENV_FILE',str(BASE_DIR / '.env')))
 DEBUG = os.getenv("DEBUG", "1") == "1"
 SECRET_KEY = os.getenv("SECRET_KEY", "development-only-change-before-deployment-po-calendar")
 if not DEBUG and SECRET_KEY.startswith("development-"):
@@ -41,3 +41,5 @@ SMS_PROVIDER=os.getenv("SMS_PROVIDER","unconfigured")
 SMS_API_KEY=os.getenv("SMS_API_KEY","")
 SMS_API_SECRET=os.getenv("SMS_API_SECRET","")
 SMS_LIVE_ENABLED=os.getenv("SMS_LIVE_ENABLED","0")=="1"
+MAINTENANCE_FILE=BASE_DIR.parent/'.runtime'/'maintenance'
+MIDDLEWARE.insert(1,'common.maintenance.MaintenanceMiddleware')

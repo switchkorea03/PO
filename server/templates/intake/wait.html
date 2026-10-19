@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<section class="card"><h1>PO 파일을 읽고 있습니다</h1><p>{{ job.source.original_name }}</p><p class="muted">상태: {{ job.status }} · 인식 worker가 실행 중이어야 합니다.</p><a class="button" href="">상태 새로고침</a><a class="button" href="/orders/new/">직접 입력으로 진행</a></section><script>setTimeout(()=>location.reload(),3000);</script>{% endblock %}

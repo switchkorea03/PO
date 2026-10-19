@@ -1,0 +1,3 @@
+import {defineConfig} from '@playwright/test';
+import {resolve} from 'node:path';
+export default defineConfig({testDir:'.',testMatch:'*.spec.mjs',workers:1,timeout:45000,use:{baseURL:'http://127.0.0.1:8001',trace:'retain-on-failure',screenshot:'only-on-failure'},webServer:{command:'"'+resolve('../../.venv/Scripts/python.exe')+'" serve.py',url:'http://127.0.0.1:8001/accounts/login/',reuseExistingServer:false,timeout:120000},projects:[{name:'desktop',use:{viewport:{width:1440,height:1000}}},{name:'laptop',use:{viewport:{width:1280,height:900}}},{name:'tablet',use:{viewport:{width:768,height:1024}}},{name:'mobile',use:{viewport:{width:360,height:800}}}]});

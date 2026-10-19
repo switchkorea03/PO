@@ -1,0 +1,4 @@
+from django.urls import path
+from . import views
+urlpatterns=[path('shipments/<uuid:shipment_id>/cancel/',views.shipment_cancel),path('shipments/<uuid:shipment_id>/eta/',views.shipment_eta)]
+urlpatterns += [path("orders/",views.list_orders,name="orders"),path("orders/new/",views.new_order,name="order-new"),path("orders/<uuid:order_id>/",views.detail,name="order-detail"),path("orders/<uuid:order_id>/edit/",views.edit_order,name="order-edit"),path("customers/",views.customer_create),path("orders/<uuid:order_id>/shipments/",views.shipment_save),path("shipments/<uuid:shipment_id>/confirm/",views.shipment_confirm),path("shipments/<uuid:shipment_id>/correct/",views.shipment_correct),path("orders/<uuid:order_id>/cancel/",views.cancel),path("lines/<uuid:line_id>/cancel-remaining/",views.cancel_remaining)]

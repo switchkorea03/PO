@@ -24,7 +24,8 @@ def _lock_order(order_id):
 def _changed(order,actor_id,action,target,before=None,after=None,reason=""):
     order.row_version+=1;order.save(update_fields=["row_version","updated_at"])
     audit(order,actor_id,action,target,before,after,reason)
-    record_change(order.id,(),actor_id,timezone.now())
+    from work.services import reconcile_order
+    reconcile_order(order.id,actor_id)
 
 def _valid_order(data):
     if data.order_type not in ("domestic","overseas") or data.erp_type not in ("domestic","export","unspecified"): raise ValidationError("거래 구분을 확인하세요.")
@@ -38,11 +39,19 @@ def _valid_order(data):
             if decimal_value(line.unit_price)<0: raise ValidationError("단가는 음수일 수 없습니다.")
         if data.order_type=="domestic" and not line.requested_due: raise ValidationError("국내 요청납기를 입력하세요.")
 
+def _order_snapshot(order):
+    fields=('customer_id','po_number','order_type','erp_type','ordered_on','received_on','contact','note','cancelled')
+    result={field:getattr(order,field) for field in fields}
+    result['lines']=list(order.lines.order_by('id').values('id','code','name','quantity','unit','unit_price','currency','source_amount','requested_due','cancelled_quantity'))
+    return result
+
 @transaction.atomic
 def save_order(data,actor_id,expected_version,order_id=None):
     _valid_order(data)
+    before={}
     if order_id:
         order=_lock_order(order_id);check_version(order,expected_version)
+        before=_order_snapshot(order)
         if order.cancelled:raise ValidationError("취소된 PO는 수정할 수 없습니다.")
         if order.shipments.exists() and data.order_type!=order.order_type:raise ValidationError("회차가 있는 PO의 국내외 구분은 변경할 수 없습니다.")
         if data.customer_id!=order.customer_id:raise ValidationError("수정본의 고객을 바꿀 수 없습니다. 새 PO로 등록하세요.")
@@ -74,7 +83,7 @@ def save_order(data,actor_id,expected_version,order_id=None):
         for sequence,(due,lines) in enumerate(sorted(grouped.items(),key=lambda x:str(x[0])),1):
             shipment=Shipment.objects.create(order=order,sequence=sequence,ship_on=next_weekday(due) if due else None)
             ShipmentLine.objects.bulk_create([ShipmentLine(shipment=shipment,line=line,quantity=line.quantity) for line in lines])
-    _changed(order,actor_id,"save_order",order.id,after={"po_number":order.po_number,"lines":[{"id":str(v.id),"quantity":str(v.quantity),"due":str(v.requested_due)} for v in order.lines.all()]})
+    _changed(order,actor_id,"save_order",order.id,before,_order_snapshot(order))
     return order
 
 def _validate_allocations(order,allocations,shipment=None):
@@ -158,3 +167,22 @@ def cancel_order(order_id,actor_id,expected_version):
         shipment.cancelled=True;shipment.row_version+=1;shipment.save()
     _changed(order,actor_id,"cancel_order",order.id,after={"cancelled":True})
     return order
+
+@transaction.atomic
+def cancel_shipment(shipment_id,reason,actor_id,expected_version):
+    original=Shipment.objects.get(pk=shipment_id);order=_lock_order(original.order_id)
+    shipment=Shipment.objects.select_for_update().get(pk=shipment_id);check_version(shipment,expected_version)
+    if shipment.completed or shipment.cancelled or order.cancelled:raise ValidationError('미완료 회차만 취소할 수 있습니다.')
+    if not reason.strip():raise ValidationError('회차 취소 사유를 입력하세요.')
+    shipment.cancelled=True;shipment.row_version+=1;shipment.save()
+    _changed(order,actor_id,'cancel_shipment',shipment.id,{'cancelled':False},{'cancelled':True,'allocations':{str(a.line_id):str(a.quantity) for a in shipment.allocations.all()}},reason)
+    return shipment
+
+@transaction.atomic
+def update_eta(shipment_id,eta,actor_id,expected_version):
+    original=Shipment.objects.get(pk=shipment_id);order=_lock_order(original.order_id)
+    shipment=Shipment.objects.select_for_update().get(pk=shipment_id);check_version(shipment,expected_version)
+    if order.order_type!='overseas' or order.cancelled or shipment.cancelled:raise ValidationError('유효한 해외 선적회차를 선택하세요.')
+    before=shipment.eta;shipment.eta=eta;shipment.row_version+=1;shipment.save()
+    _changed(order,actor_id,'update_eta',shipment.id,{'eta':before},{'eta':eta})
+    return shipment
