@@ -6,7 +6,7 @@ from django.db.models import Q
 
 class Customer(models.Model):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
-    name=models.CharField(max_length=200)
+    name=models.CharField(max_length=200,unique=True)
     contact=models.CharField(max_length=200,blank=True)
     default_type=models.CharField(max_length=12,default="domestic")
     currency=models.CharField(max_length=3,default="KRW")

@@ -46,7 +46,8 @@ def customer_create(request):
     if not name:raise ValidationError("고객명을 입력하세요.")
     customer=Customer(name=name,contact=data.get("contact",""),default_type=data.get("default_type","domestic"),currency=data.get("currency","KRW"))
     if customer.default_type not in ("domestic","overseas") or len(customer.currency)!=3:raise ValidationError("고객 기본값을 확인하세요.")
-    customer.full_clean();customer.save()
+    customer.full_clean(validate_unique=False)
+    customer,_=Customer.objects.get_or_create(name=name,defaults={'contact':customer.contact,'default_type':customer.default_type,'currency':customer.currency})
     return JsonResponse({"id":str(customer.id),"name":customer.name,"default_type":customer.default_type,"currency":customer.currency})
 
 @require_POST

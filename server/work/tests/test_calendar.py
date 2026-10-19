@@ -10,8 +10,9 @@ class CalendarTests(TestCase):
         self.user=get_user_model().objects.create_user("manager",password="testing-pass-123")
         self.client.force_login(self.user)
     def test_share_group_preserves_three_tasks(self):
+        from orders.models import Customer
         for customer in ("A","B","A"):
-            o=make_order();o.customer.name=customer;o.customer.save();make_shipment(o,"100",ship_on="2026-10-19")
+            o=make_order();o.customer=Customer.objects.get_or_create(name=customer)[0];o.save();make_shipment(o,"100",ship_on="2026-10-19")
         response=self.client.get("/api/calendar/?start=2026-10-16&end=2026-10-19")
         self.assertEqual(response.status_code,200)
         groups=response.json()["groups"]
