@@ -1,0 +1,11 @@
+<div class="calendar-day {% if day.outside %}outside{% endif %} {% if day.selected %}selected{% endif %}" data-calendar-date="{{ day.date|date:'Y-m-d' }}">
+  <div class="day-heading"><span class="day-number {% if day.today %}today{% endif %}">{{ day.date|date:'j' }}{% if day.today %}<span class="sr-only"> 오늘</span>{% endif %}</span>{% if day.schedule_count %}<span class="day-company-count">{{ day.customer_count }}개 업체</span>{% endif %}</div>
+  <div class="day-companies">{% for company in day.company_blocks %}
+    <section class="calendar-company {{ company.tone }}"><h3>{{ company.name }}</h3><ul>
+      {% for item in company.items %}<li class="calendar-work {{ item.tone }}">
+        <div class="calendar-work-heading"><a href="{{ item.links.0.url }}">{{ item.title }}</a>{% if item.status != '예정' and item.status != '납기' %}<span>{{ item.status }}</span>{% endif %}</div>
+        <div class="calendar-po-links">{% for link in item.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}</div>
+      </li>{% endfor %}
+    </ul></section>{% endfor %}
+  </div>
+</div>

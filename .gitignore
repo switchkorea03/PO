@@ -1,0 +1,23 @@
+.superpowers/
+
+.venv/
+.runtime/
+server/.env
+server/private_media/
+server/staticfiles/
+__pycache__/
+*.pyc
+*.log
+node_modules/
+test-results/
+playwright-report/
+no-upload-test-results/
+
+# Local credentials and backup data must stay outside source control.
+.env
+.env.*
+!.env.example
+*.dump
+*.backup
+*.sqlite3
+backups/

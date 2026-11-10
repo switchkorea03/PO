@@ -4,3 +4,4 @@ SMS_PROVIDER="fake"
 SMS_LIVE_ENABLED=False
 PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"]
 PRIVATE_MEDIA_ROOT=BASE_DIR.parent/".runtime"/"e2e-media"
+GEMINI_API_KEY=''  # Browser regression tests must never call the live provider.

@@ -7,7 +7,7 @@ from work.models import Task
 
 class ModelTests(TestCase):
     def setUp(self):
-        self.customer=Customer.objects.create(name="범진전자")
+        self.customer=Customer.objects.get_or_create(name="범진전자")[0]
         self.order=Order.objects.create(customer=self.customer,po_number="P-100",order_type="domestic")
     def test_money_precision(self):
         line=OrderLine.objects.create(order=self.order,code="A",name="부품",quantity=Decimal("0.1"),unit="EA",unit_price=Decimal("0.2"),currency="KRW")

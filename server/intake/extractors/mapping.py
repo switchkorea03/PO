@@ -4,8 +4,8 @@ from datetime import date
 from .base import ExtractedField,ExtractionResult
 
 ALIASES={
- 'code':['품목코드','제품코드','모델명','모델','itemcode','partno','partnumber','model','code'],
- 'name':['품명','품목명','제품명','description','itemname','name'],
+ 'code':['고객품목명','품목코드','제품코드','모델명','모델','itemcode','partno','partnumber','model','code'],
+ 'name':['스펙','규격','spec','specification','품명','품목명','제품명','description','itemname','name'],
  'quantity':['수량','주문수량','quantity','qty'],
  'unit':['단위','unit','uom'],
  'unit_price':['단가','unitprice','price'],
@@ -23,6 +23,9 @@ def key_for(label):
     return next((key for key,aliases in ALIASES.items() if normal in aliases),None)
 
 def map_evidence(evidence,customer_id=None):
+    from .chemtrovina import extract_chemtrovina
+    structured=extract_chemtrovina(evidence)
+    if structured is not None:return structured
     from .bumjin import extract_bumjin
     structured=extract_bumjin(evidence)
     if structured is not None:return structured

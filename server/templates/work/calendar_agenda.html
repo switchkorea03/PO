@@ -1,0 +1,15 @@
+<section class="card day-agenda" data-agenda tabindex="-1" aria-label="날짜별 업무">
+  <div class="agenda-head"><h2 id="calendar-dialog-title">{{ selected|date:'n월 j일 l' }} 업무</h2><p>{{ selected_summary.customer_count }}개 업체 · 업무를 누르면 세부 작업을 확인할 수 있습니다.</p></div>
+  <div class="agenda-scroll" tabindex="0" aria-label="업체별 전체 업무 목록">{% for group in agenda_groups %}
+    <section class="agenda-company"><div class="agenda-company-head"><h3>{{ group.name }}</h3></div>
+      <div class="task-list">{% for task in group.tasks %}
+        <a class="agenda-task {% if task.state == 'done' %}done{% elif task.suspended %}muted{% elif task.effective_on < today %}late{% else %}planned{% endif %}" href="/tasks/{{ task.id }}/">
+          <span><strong>{{ task.title }}</strong><small>PO {{ task.order.po_number }}{% if task.shipment %} · {{ task.shipment.sequence }}차{% endif %}</small>{% if task.manual_on %}<span class="badge manual">수동 지정</span>{% endif %}{% if task.needs_review %}<span class="badge partial">재확인 필요</span>{% endif %}</span>
+          <span class="agenda-status">{% if task.suspended %}보류{% elif task.state == 'done' %}완료{% elif task.effective_on < today %}지연{% elif task.state == 'partial' %}부분완료{% endif %}</span>
+        </a>{% endfor %}
+        {% for due in group.dues %}<a class="agenda-task due" href="{{ due.url }}"><span><strong>납기일</strong><small>{{ due.line_name }}</small></span><span class="agenda-status">납기</span></a>{% endfor %}
+      </div>
+    </section>{% empty %}<p class="empty">이 날짜에 등록된 업무나 납기가 없습니다.</p>{% endfor %}
+    {% if cancelled_tasks %}<details class="cancelled-agenda"><summary>취소된 업무 {{ cancelled_tasks|length }}개 · 이력 보기</summary><div class="task-list">{% for task in cancelled_tasks %}<a class="agenda-task muted" href="/tasks/{{ task.id }}/"><span><strong>{{ task.order.customer.name }} · {{ task.title }}</strong><small>PO {{ task.order.po_number }}</small></span><span class="agenda-status">취소</span></a>{% endfor %}</div></details>{% endif %}
+  </div>
+</section>

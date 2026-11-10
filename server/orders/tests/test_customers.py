@@ -16,7 +16,7 @@ class CustomerTests(TestCase):
             self.assertEqual(response.status_code,200);ids.append(response.json()['id'])
         self.assertEqual(len(set(ids)),1)
         self.assertEqual(Customer.objects.filter(name='범진전자').count(),1)
-        self.assertEqual(Customer.objects.get().currency,'KRW')
+        self.assertEqual(Customer.objects.get(name='범진전자').currency,'KRW')
 
 class ConcurrentCustomerTests(TransactionTestCase):
     def test_simultaneous_add_creates_one_customer(self):
@@ -31,13 +31,14 @@ class ConcurrentCustomerTests(TransactionTestCase):
         with ThreadPoolExecutor(max_workers=3) as pool:results=list(pool.map(add,range(3)))
         self.assertTrue(all(status==200 for status,_ in results))
         self.assertEqual(len({key for _,key in results}),1)
-        self.assertEqual(Customer.objects.count(),1)
+        self.assertEqual(Customer.objects.filter(name='범진전자').count(),1)
 
 class CustomerMergeMigrationTests(TransactionTestCase):
     def test_duplicate_merge_keeps_all_po_records(self):
         from django.db import connection
         from django.db.migrations.executor import MigrationExecutor
         executor=MigrationExecutor(connection)
+        current=executor.loader.graph.leaf_nodes('orders')
         previous=[('orders','0002_changeevent_consumed_at')]
         latest=[('orders','0003_unique_customer_name')]
         executor.migrate(previous)
@@ -49,7 +50,7 @@ class CustomerMergeMigrationTests(TransactionTestCase):
             second=OldOrder.objects.create(customer=b,po_number='PO-2',order_type='domestic')
             executor=MigrationExecutor(connection);executor.migrate(latest)
             self.assertEqual(Customer.objects.filter(name='중복고객').count(),1)
-            from orders.models import Order
-            self.assertEqual(Order.objects.filter(id__in=[first.id,second.id]).count(),2)
-            self.assertEqual(Order.objects.get(pk=first.id).customer_id,Order.objects.get(pk=second.id).customer_id)
-        finally:MigrationExecutor(connection).migrate(latest)
+            MergedOrder=executor.loader.project_state(latest).apps.get_model('orders','Order')
+            self.assertEqual(MergedOrder.objects.filter(id__in=[first.id,second.id]).count(),2)
+            self.assertEqual(MergedOrder.objects.get(pk=first.id).customer_id,MergedOrder.objects.get(pk=second.id).customer_id)
+        finally:MigrationExecutor(connection).migrate(current)

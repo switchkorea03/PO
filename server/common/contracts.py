@@ -32,6 +32,7 @@ class LineInput:
     currency: str="KRW"
     source_amount: Decimal|None=None
     requested_due: date|None=None
+    internal_name: str=""
 @dataclass(frozen=True)
 class OrderInput:
     customer_id: UUID

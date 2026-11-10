@@ -12,6 +12,18 @@ from intake.worker import process_extraction
 from .test_upload import excel_bytes
 
 class ReviewTests(TestCase):
+    def test_customer_item_and_spec_headers_map_to_editable_fields(self):
+        import io
+        from openpyxl import Workbook
+        workbook=Workbook();sheet=workbook.active
+        sheet.append(['고객품목명','스펙','수량','단위','단가','공급가액','납기일'])
+        sheet.append(['MESA100005A','MCU 32BIT',1000,'EA',1500,1500000,'2026-10-29'])
+        content=io.BytesIO();workbook.save(content)
+        uploaded=upload_source(SimpleUploadedFile('labels.xlsx',content.getvalue()),self.user.id)
+        draft=process_extraction(uploaded.job_id)
+        self.assertEqual(draft.result['lines'][0]['code']['value'],'MESA100005A')
+        self.assertEqual(draft.result['lines'][0]['name']['value'],'MCU 32BIT')
+
     def setUp(self):
         self.user=get_user_model().objects.create_user('manager');self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.override=override_settings(PRIVATE_MEDIA_ROOT=Path(self.tmp.name));self.override.enable();self.addCleanup(self.override.disable)

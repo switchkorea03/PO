@@ -3,6 +3,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.getenv('ENV_FILE',str(BASE_DIR / '.env')))
+from common.ocr import configure_local_ocr
+configure_local_ocr(BASE_DIR.parent/'.runtime/tesseract')
 DEBUG = os.getenv("DEBUG", "1") == "1"
 SECRET_KEY = os.getenv("SECRET_KEY", "development-only-change-before-deployment-po-calendar")
 if not DEBUG and SECRET_KEY.startswith("development-"):
@@ -42,4 +44,8 @@ SMS_API_KEY=os.getenv("SMS_API_KEY","")
 SMS_API_SECRET=os.getenv("SMS_API_SECRET","")
 SMS_LIVE_ENABLED=os.getenv("SMS_LIVE_ENABLED","0")=="1"
 MAINTENANCE_FILE=BASE_DIR.parent/'.runtime'/'maintenance'
+GEMINI_API_KEY=os.getenv('GEMINI_API_KEY','')
+GEMINI_MODEL=os.getenv('GEMINI_MODEL','gemini-3.1-flash-lite')
+GEMINI_DAILY_LIMIT=int(os.getenv('GEMINI_DAILY_LIMIT','20'))
+GEMINI_MAX_FILE_BYTES=10*1024*1024
 MIDDLEWARE.insert(1,'common.maintenance.MaintenanceMiddleware')

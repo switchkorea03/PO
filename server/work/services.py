@@ -15,7 +15,7 @@ from .rules import build_task_specs
 from .queries import task_view
 
 def snapshot(order):
-    lines=tuple(LineInput(v.id,v.code,v.name,v.quantity,v.unit,v.unit_price,v.currency,v.source_amount,v.requested_due) for v in order.lines.all())
+    lines=tuple(LineInput(v.id,v.code,v.name,v.quantity,v.unit,v.unit_price,v.currency,v.source_amount,v.requested_due,v.internal_name) for v in order.lines.all())
     shipments=tuple(ShipmentInput(v.id,v.ship_on,v.etd,v.eta,{a.line_id:a.quantity for a in v.allocations.all()}) for v in order.shipments.filter(cancelled=False).prefetch_related("allocations"))
     currencies={line.currency for line in lines}
     return OrderSnapshot(order.id,order.order_type,order.erp_type,next(iter(currencies)) if len(currencies)==1 else "MIX",order.received_on,lines,shipments)
@@ -33,7 +33,7 @@ def _eligible(task,before_on,before_state):
     return None
 
 @transaction.atomic
-def reconcile_order(order_id,actor_id):
+def reconcile_order(order_id,actor_id,*,reopen_cancelled=False):
     order=Order.objects.select_for_update().select_related("customer").get(pk=order_id)
     snap=snapshot(order);active=set();changed=[];eligibility=[]
     for spec in build_task_specs(snap):
@@ -47,6 +47,8 @@ def reconcile_order(order_id,actor_id):
             was_suspended=task.suspended
             task.suspended=spec.auto_on is None
             if order.cancelled:task.state="cancelled"
+            elif reopen_cancelled and task.state=='cancelled':
+                task.state='partial' if task.substeps.filter(done=True).exists() else 'open'
             if task.manual_on and (task.auto_on!=spec.auto_on or was_suspended):task.recalc_needed=True
             if was_suspended and spec.auto_on and task.manual_on:
                 task.suspended=True;task.recalc_needed=True
@@ -77,7 +79,7 @@ def reconcile_order(order_id,actor_id):
 @transaction.atomic
 def move_task(task_id,target_on,actor_id,expected_version):
     original=Task.objects.get(pk=task_id)
-    Order.objects.select_for_update().get(pk=original.order_id)
+    Order.objects.select_for_update().get(pk=original.order_id,is_deleted=False)
     task=Task.objects.select_for_update().select_related("order__customer").get(pk=task_id);check_version(task,expected_version)
     if task.state in ("done","cancelled"):raise ValidationError("완료·취소 업무는 먼저 재작업 여부를 확인하세요.")
     if target_on and target_on.weekday()>=5:raise ValidationError("사내 업무일은 평일로 지정하세요.")
@@ -96,7 +98,7 @@ def move_task(task_id,target_on,actor_id,expected_version):
 @transaction.atomic
 def set_substep(substep_id,done,actor_id,expected_version):
     original=Substep.objects.select_related("task").get(pk=substep_id)
-    Order.objects.select_for_update().get(pk=original.task.order_id)
+    Order.objects.select_for_update().get(pk=original.task.order_id,is_deleted=False)
     task=Task.objects.select_for_update().select_related("order__customer").get(pk=original.task_id);check_version(task,expected_version)
     if task.state=="cancelled":raise ValidationError("취소된 업무입니다.")
     step=Substep.objects.get(pk=substep_id)
@@ -114,7 +116,7 @@ def set_substep(substep_id,done,actor_id,expected_version):
 
 @transaction.atomic
 def review_completed_task(task_id,reopen,actor_id,expected_version):
-    original=Task.objects.get(pk=task_id);Order.objects.select_for_update().get(pk=original.order_id)
+    original=Task.objects.get(pk=task_id);Order.objects.select_for_update().get(pk=original.order_id,is_deleted=False)
     task=Task.objects.select_for_update().select_related("order__customer").get(pk=task_id);check_version(task,expected_version)
     if task.state!="done":raise ValidationError("완료한 업무의 재확인을 선택하세요.")
     before={"state":task.state,"completed_at":task.completed_at,"completed_by":task.completed_by_id,"steps":list(task.substeps.values("id","label","done","completed_at","completed_by_id"))}

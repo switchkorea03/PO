@@ -1,0 +1,8 @@
+{
+  "name": "flowpo-ui-mockup",
+  "description": "PO 주문·출고 자동화 상세 동적 UI 목업",
+  "static": {
+    "directory": "dist",
+    "not_found_handling": "single-page-application"
+  }
+}

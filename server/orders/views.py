@@ -1,7 +1,11 @@
 from dataclasses import asdict
-from django.http import JsonResponse
+from django.http import JsonResponse,FileResponse
 from django.shortcuts import render,get_object_or_404,redirect
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST,require_GET
+from django.contrib import messages
+from django.db.models import Q
+from django.utils.http import url_has_allowed_host_and_scheme
+from urllib.parse import urlsplit
 from common.http import endpoint,body,parse_date
 from common.errors import ValidationError
 from .models import Customer,Order,OrderLine,Shipment
@@ -22,25 +26,82 @@ def new_order(request):
     if request.method=="POST":
         data=body(request);order=services.save_order(order_input(data),request.user.id,None)
         return JsonResponse({"id":str(order.id),"url":f"/orders/{order.id}/"})
-    return render(request,"orders/form.html",{"customers":Customer.objects.all(),"order":None,"lines":[],"initial_data":{"lines":[]}})
+    return render(request,"orders/form.html",{"customers":Customer.objects.order_by('default_type','name'),"order":None,"lines":[],"initial_data":{"lines":[]}})
+
+@require_GET
+@endpoint
+def export_orders(request):
+    from .exports import orders_workbook
+    from common.clock import today_kst
+    from django.utils import timezone
+    orders=search_orders(request.GET.get('q',''),request.GET.get('type'),request.GET.get('customer'),request.GET.get('state'))
+    response=FileResponse(orders_workbook(orders),as_attachment=True,
+        filename=f'PO-list-{today_kst(timezone.now()):%Y%m%d}.xlsx',
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Cache-Control']='private, no-store'
+    return response
 
 @endpoint
-def edit_order(request,order_id):
-    order=Order.objects.select_related("customer").get(pk=order_id)
+def edit_order(request,order_id,reregister=False):
+    orders=Order.objects.select_related('customer')
+    orders=orders.filter(Q(is_deleted=True)|Q(cancelled=True)) if reregister else orders.filter(is_deleted=False)
+    order=orders.get(pk=order_id)
     if request.method=="POST":
-        data=body(request);order=services.save_order(order_input(data),request.user.id,data.get("row_version"),order.id)
+        data=body(request)
+        if reregister:
+            order=services.reregister_order(order.id,order_input(data),request.user.id,data.get("row_version"))
+        else:
+            order=services.save_order(order_input(data),request.user.id,data.get("row_version"),order.id)
         return JsonResponse({"id":str(order.id),"url":f"/orders/{order.id}/"})
     initial={"customer_id":str(order.customer_id),"po_number":order.po_number,"order_type":order.order_type,"erp_type":order.erp_type,"ordered_on":order.ordered_on,"received_on":order.received_on,"contact":order.contact,"note":order.note,"row_version":order.row_version,"lines":[{"id":str(v.id),"code":v.code,"name":v.name,"quantity":str(v.quantity),"unit":v.unit,"unit_price":str(v.unit_price) if v.unit_price is not None else "","currency":v.currency,"source_amount":str(v.source_amount) if v.source_amount is not None else "","requested_due":v.requested_due} for v in order.lines.all()]}
-    return render(request,"orders/form.html",{"customers":Customer.objects.all(),"order":order,"initial_data":initial})
+    for line,values in zip(order.lines.all(),initial['lines']):values['internal_name']=line.internal_name
+    return render(request,"orders/form.html",{"customers":Customer.objects.order_by('default_type','name'),"order":order,"initial_data":initial,"reregister":reregister})
 
 @endpoint
 def detail(request,order_id):
-    order=Order.objects.select_related("customer").get(pk=order_id)
+    order=Order.objects.select_related("customer").get(pk=order_id,is_deleted=False)
     shipments=[]
     for shipment in order.shipments.all():
         allocations={a.line_id:a.quantity for a in shipment.allocations.all()}
         shipments.append({"shipment":shipment,"rows":[{"line":line,"quantity":allocations.get(line.id,"")} for line in order.lines.all()]})
     return render(request,"orders/detail.html",{"order":order,"shipments":shipments,"tasks":order.tasks.prefetch_related("substeps"),"history":order.history.select_related("actor")[:50]})
+
+@require_POST
+@endpoint
+def line_due(request,line_id):
+    data=body(request)
+    target=data.get('return_to','/orders/')
+    if not (url_has_allowed_host_and_scheme(target,{request.get_host()}) and urlsplit(target).path=='/orders/'):
+        target='/orders/'
+    try:
+        order=services.update_requested_due(line_id,parse_date(data.get('requested_due')),request.user.id,data.get('row_version'))
+    except (ValidationError,ValueError) as exc:
+        if request.content_type=='application/json':raise
+        messages.error(request,str(exc) if isinstance(exc,ValidationError) else '납기일을 확인하세요.')
+        return redirect(target)
+    if request.content_type=='application/json':return JsonResponse({'id':str(line_id),'row_version':order.row_version})
+    messages.success(request,'납기일을 저장했습니다.')
+    return redirect(target)
+
+@require_POST
+@endpoint
+def delete_order(request,order_id):
+    try:
+        order=services.delete_order(order_id,request.user.id,body(request).get('row_version'))
+    except ValidationError as exc:
+        if request.content_type=='application/json':raise
+        messages.error(request,str(exc))
+        return redirect('/orders/')
+    if request.content_type!='application/json':
+        messages.success(request,'PO를 휴지통으로 이동했습니다.')
+        return redirect('/orders/')
+    return JsonResponse({'id':str(order.id),'deleted':True,'url':'/orders/'})
+
+@require_POST
+@endpoint
+def restore_order(request,order_id):
+    order=services.restore_order(order_id,request.user.id,body(request).get('row_version'))
+    return JsonResponse({'id':str(order.id),'deleted':False,'url':f'/orders/{order.id}/'})
 
 @require_POST
 @endpoint

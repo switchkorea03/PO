@@ -25,6 +25,8 @@ class Order(models.Model):
     contact=models.CharField(max_length=200,blank=True)
     note=models.TextField(blank=True)
     cancelled=models.BooleanField(default=False)
+    is_deleted=models.BooleanField(default=False,db_index=True)
+    deleted_at=models.DateTimeField(null=True,blank=True)
     row_version=models.PositiveIntegerField(default=1)
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
@@ -38,6 +40,7 @@ class OrderLine(models.Model):
     order=models.ForeignKey(Order,on_delete=models.CASCADE,related_name="lines")
     code=models.CharField(max_length=120,blank=True)
     name=models.CharField(max_length=300)
+    internal_name=models.CharField(max_length=200,blank=True)
     quantity=models.DecimalField(max_digits=30,decimal_places=10)
     cancelled_quantity=models.DecimalField(max_digits=30,decimal_places=10,default=0)
     unit=models.CharField(max_length=30)
@@ -48,6 +51,15 @@ class OrderLine(models.Model):
     class Meta:
         ordering=["id"]
         constraints=[models.CheckConstraint(condition=Q(quantity__gt=0),name="positive_line_qty"),models.CheckConstraint(condition=Q(cancelled_quantity__gte=0)&Q(cancelled_quantity__lte=models.F("quantity")),name="valid_cancelled_qty")]
+    @property
+    def resolved_internal_name(self):
+        from .item_mapping import mapped_internal_name
+        return self.internal_name or mapped_internal_name(self.code,self.name)
+    @property
+    def display_name(self):
+        customer_name=self.name or self.code
+        internal=self.resolved_internal_name
+        return f'{customer_name} ({internal})' if internal else customer_name
     @property
     def amount(self):
         if self.unit_price is None: return None

@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from orders.models import Customer,Order
 from orders.forms import order_input
-from .models import SourceFile,ExtractionJob,ExtractionDraft
+from .models import SourceFile,ExtractionJob,ExtractionDraft,GeminiDailyUsage
 from .services import upload_source,confirm_draft
 
 @endpoint
@@ -19,7 +19,10 @@ def upload(request):
         if 'file' not in request.FILES:raise ValidationError('PO 파일을 선택하세요.')
         result=upload_source(request.FILES['file'],request.user.id)
         if result.duplicate_order_ids:
-            return render(request,'intake/upload.html',{'duplicates':Order.objects.filter(id__in=result.duplicate_order_ids),'source_id':result.source_id})
+            duplicates=list(Order.objects.filter(id__in=result.duplicate_order_ids))
+            if len(duplicates)==1 and (duplicates[0].is_deleted or duplicates[0].cancelled):
+                return redirect(f'/orders/{duplicates[0].id}/reregister/')
+            return render(request,'intake/upload.html',{'duplicates':duplicates,'source_id':result.source_id})
         return redirect(f'/intake/jobs/{result.job_id}/')
     return render(request,'intake/upload.html')
 
@@ -39,10 +42,11 @@ def source_download(request,source_id):
 @endpoint
 def source_preview(request,source_id):
     source=SourceFile.objects.get(pk=source_id);path=Path(source.path).resolve()
-    if source.extension!='.pdf':raise ValidationError('이 파일은 원본 다운로드 후 확인하세요.')
+    if source.extension not in ('.pdf','.png'):raise ValidationError('이 파일은 원본 다운로드 후 확인하세요.')
     if not path.is_relative_to(Path(settings.PRIVATE_MEDIA_ROOT).resolve()):raise ValidationError('파일 보관 경로를 확인하세요.')
-    response=FileResponse(path.open('rb'),content_type='application/pdf',as_attachment=False,filename=source.original_name)
+    response=FileResponse(path.open('rb'),content_type='image/png' if source.extension=='.png' else 'application/pdf',as_attachment=False,filename=source.original_name)
     response['Cache-Control']='private, no-store'
+    response['Cross-Origin-Resource-Policy']='same-origin'
     return response
 
 @endpoint
@@ -63,7 +67,9 @@ def source_preview_image(request,source_id):
 @endpoint
 def review(request,draft_id):
     draft=ExtractionDraft.objects.select_related('job__source').get(pk=draft_id)
-    if draft.confirmed_order_id:return redirect(f'/orders/{draft.confirmed_order_id}/')
+    if draft.confirmed_order_id:
+        inactive=draft.confirmed_order.is_deleted or draft.confirmed_order.cancelled
+        return redirect(f'/orders/{draft.confirmed_order_id}/reregister/' if inactive else f'/orders/{draft.confirmed_order_id}/')
     fields=draft.result.get('fields',{})
     initial={key:value.get('value') for key,value in fields.items()}
     customer=Customer.objects.filter(name=initial.get('customer_name')).first()
@@ -73,16 +79,23 @@ def review(request,draft_id):
         target=Order.objects.select_related('customer').get(pk=request.GET['target']);customer=target.customer
     suggested_type=initial.get('order_type') if initial.get('order_type') in ('domestic','overseas') else 'domestic'
     initial.update({'customer_id':str(customer.id) if customer else '', 'order_type':customer.default_type if customer else suggested_type,'erp_type':target.erp_type if target else 'unspecified','received_on':initial.get('received_on') or today_kst(timezone.now()).isoformat(),'lines':[{key:value.get('value') for key,value in line.items()} for line in draft.result.get('lines',[])]})
+    from orders.item_mapping import mapped_internal_name
+    for line in initial['lines']:
+        if not line.get('internal_name'):line['internal_name']=mapped_internal_name(line.get('code',''),line.get('name',''))
     if target:
         initial.update({'target_order_id':str(target.id),'row_version':target.row_version,'po_number':target.po_number,'order_type':target.order_type,'received_on':target.received_on or initial['received_on']})
         existing=list(target.lines.all())
-        initial['revision_lines']=[{'id':str(v.id),'label':f'{v.code} · {v.name} · {v.quantity} {v.unit}'} for v in existing]
+        initial['revision_lines']=[{'id':str(v.id),'label':f'{v.code} · {v.name} · {v.quantity} {v.unit}','internal_name':v.internal_name} for v in existing]
         by_code={v.code:v for v in existing if v.code and sum(x.code==v.code for x in existing)==1}
         for line in initial['lines']:
             code=line.get('code')
-            if code in by_code and sum(x.get('code')==code for x in initial['lines'])==1:line['id']=str(by_code[code].id)
+            if code in by_code and sum(x.get('code')==code for x in initial['lines'])==1:
+                line['id']=str(by_code[code].id)
+                line['internal_name']=by_code[code].internal_name
     initial['draft_version']=draft.row_version
-    return render(request,'intake/review.html',{'draft':draft,'source':draft.job.source,'customers':Customer.objects.all(),'target':target,'initial_data':initial,'warnings':draft.result.get('warnings',[]),'evidence':draft.result.get('evidence',[])})
+    daily=GeminiDailyUsage.objects.filter(day=today_kst(timezone.now())).first()
+    ai_context={'enabled':bool(settings.GEMINI_API_KEY),'model':settings.GEMINI_MODEL,'limit':settings.GEMINI_DAILY_LIMIT,'used':daily.calls if daily else 0}
+    return render(request,'intake/review.html',{'draft':draft,'source':draft.job.source,'customers':Customer.objects.order_by('default_type','name'),'target':target,'initial_data':initial,'warnings':draft.result.get('warnings',[]),'evidence':draft.result.get('evidence',[]),'gemini':ai_context})
 
 @endpoint
 def confirm(request,draft_id):

@@ -28,10 +28,11 @@ class UploadTests(TestCase):
     def test_disguised_file_rejected(self):
         with self.assertRaises(ValidationError):upload_source(SimpleUploadedFile('bad.pdf',b'<html>not a PDF</html>'),self.user.id)
     def test_private_download_and_safe_path(self):
-        result=upload_source(SimpleUploadedFile('../../unsafe.xlsx',excel_bytes()),self.user.id)
+        content=excel_bytes()
+        result=upload_source(SimpleUploadedFile('../../unsafe.xlsx',content),self.user.id)
         source=SourceFile.objects.get(pk=result.source_id)
         self.assertTrue(Path(source.path).resolve().is_relative_to(Path(self.tmp.name).resolve()))
         self.assertEqual(self.client.get(f'/sources/{source.id}/download/').status_code,302)
         self.client.force_login(self.user)
         response=self.client.get(f'/sources/{source.id}/download/')
-        self.assertEqual(response.status_code,200);self.assertEqual(b''.join(response.streaming_content),excel_bytes())
+        self.assertEqual(response.status_code,200);self.assertEqual(b''.join(response.streaming_content),content)

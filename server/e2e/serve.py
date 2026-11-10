@@ -15,6 +15,7 @@ assert settings.DATABASES['default']['NAME']=='po_calendar_e2e'
 from django.core.management import call_command
 call_command('migrate',interactive=False,verbosity=0)
 call_command('flush',interactive=False,verbosity=0)
+call_command('seed_po_defaults',verbosity=0)
 from django.contrib.auth import get_user_model
 get_user_model().objects.create_user('e2e-manager',password='local-e2e-password',is_staff=True,is_superuser=True)
 import threading,time

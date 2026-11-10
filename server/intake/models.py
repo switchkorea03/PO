@@ -38,3 +38,22 @@ class OrderSource(models.Model):
     class Meta:
         ordering=['-version']
         constraints=[models.UniqueConstraint(fields=['order','version'],name='unique_source_version'),models.UniqueConstraint(fields=['order','source'],name='unique_order_source')]
+
+class GeminiDailyUsage(models.Model):
+    day=models.DateField(primary_key=True)
+    calls=models.PositiveIntegerField(default=0)
+
+class GeminiReview(models.Model):
+    id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    draft=models.ForeignKey(ExtractionDraft,on_delete=models.PROTECT,related_name='gemini_reviews')
+    requested_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.PROTECT)
+    model=models.CharField(max_length=100)
+    draft_version=models.PositiveIntegerField()
+    status=models.CharField(max_length=16,default='running')
+    original_result=models.JSONField(default=dict)
+    result=models.JSONField(default=dict)
+    usage=models.JSONField(default=dict)
+    error=models.TextField(blank=True)
+    created_at=models.DateTimeField(auto_now_add=True)
+    finished_at=models.DateTimeField(null=True,blank=True)
+    applied_at=models.DateTimeField(null=True,blank=True)

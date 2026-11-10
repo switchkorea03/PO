@@ -3,7 +3,8 @@ from .models import Order
 
 def search_orders(query="",order_type=None,customer_id=None,state=None):
     qs=Order.objects.select_related("customer").prefetch_related("lines","shipments")
-    if query:qs=qs.filter(Q(customer__name__icontains=query)|Q(po_number__icontains=query)|Q(lines__code__icontains=query)|Q(lines__name__icontains=query)).distinct()
+    qs=qs.filter(is_deleted=state=='deleted')
+    if query:qs=qs.filter(Q(customer__name__icontains=query)|Q(po_number__icontains=query)|Q(lines__code__icontains=query)|Q(lines__name__icontains=query)|Q(lines__internal_name__icontains=query)).distinct()
     if order_type in ("domestic","overseas"):qs=qs.filter(order_type=order_type)
     if customer_id:qs=qs.filter(customer_id=customer_id)
     if state=="cancelled":qs=qs.filter(cancelled=True)
